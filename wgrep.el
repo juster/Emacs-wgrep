@@ -181,6 +181,8 @@ Key to enable `wgrep-mode'."
 ;; GNU Emacs have this variable at least version 21 or later
 (defvar auto-coding-regexp-alist)
 
+(defvar wgrep-coding-system nil)
+
 ;;;;
 ;;;; Constant
 ;;;;
@@ -738,6 +740,11 @@ non editable region.")
   (let ((beg (point))
         end)
     (insert new-text)
+    (when (not (eq wgrep-coding-system buffer-file-coding-system))
+      (recode-region beg
+                     (save-excursion (forward-line) (point))
+                     buffer-file-coding-system
+                     wgrep-coding-system))
     (let* ((end (point))
            ;; highlight the changed line
            (ov (wgrep-put-overlay-to-file-buffer beg end)))
@@ -903,16 +910,21 @@ NEW may be nil this means deleting whole line."
       (when new
         (setq new (wgrep-string-replace-bom new coding))))
     ;; Check buffer line was modified after execute grep.
+    (when (not (eq wgrep-coding-system buffer-file-coding-system))
+      (recode-region (point-at-bol)
+                     (save-excursion (forward-line) (point-at-bol))
+                     wgrep-coding-system
+                     buffer-file-coding-system))
     (unless (string= old
                      (buffer-substring-no-properties
                       (point-at-bol) (point-at-eol)))
-      (signal 'wgrep-error (list "Buffer was changed after grep.")))
-    (cond
-     (new
-      (wgrep-replace-to-new-line new))
-     (t
-      ;; new nil means flush whole line.
-      (wgrep-flush-whole-line)))))
+      (signal 'wgrep-error (list "Buffer was changed after grep."))))
+  (cond
+   (new
+    (wgrep-replace-to-new-line new))
+   (t
+    ;; new nil means flush whole line.
+    (wgrep-flush-whole-line))))
 
 ;;;
 ;;; UI
@@ -999,6 +1011,7 @@ a file."
 These changes are not immediately saved to disk unless
 `wgrep-auto-save-buffer' is non-nil."
   (interactive)
+  (setq wgrep-coding-system buffer-file-coding-system)
   (let* ((tran (wgrep-compute-transaction))
          (all-length (length tran))
          (wgrep-auto-apply-disk nil)
